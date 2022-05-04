@@ -52,7 +52,7 @@ class C45:
                 if self.isAttrDiscrete(self.attributes[attr_idx]):
                     self.testingData[idx][attr_idx] = float(self.testingData[idx][attr_idx])
 
-    def test(self, node, dataRow):
+    def predict(self, node, dataRow):
         if not node.isLeaf:
             # get node attribute index
             nodeAttrIdx = -1
@@ -60,29 +60,34 @@ class C45:
                 if self.attributes[attrIdx] == node.label:
                     nodeAttrIdx = attrIdx
                     break
-
             if node.threshold is None:
                 for idx, child in enumerate(node.children):
-                    if dataRow[nodeAttrIdx] == child.label:
+                    if dataRow[nodeAttrIdx] == self.attrValues[node.label][idx]:
                         if child.isLeaf:
-                            pass
+                            return str(child.label)
                         else:
-                            self.data(child, dataRow)
+                            return self.predict(child, dataRow)
             else:
                 leftChild = node.children[0]
                 rightChild = node.children[1]
 
                 if float(dataRow[nodeAttrIdx]) <= node.threshold:
                     if leftChild.isLeaf:
-                        return leftChild.label
+                        return str(leftChild.label)
                     else:
-                        self.test(leftChild, dataRow)
+                        return self.predict(leftChild, dataRow)
                 else:
                     if rightChild.isLeaf:
-                        return rightChild.label
+                        return str(rightChild.label)
                     else:
-                        self.test(rightChild, dataRow)
+                        return self.predict(rightChild, dataRow)
 
+    def validate(self):
+        result = []
+        for row in self.data:
+            print(self.predict(self.tree, row))
+            result.append(self.predict(self.tree, row))
+        return result
 
     def printTree(self):
         self.printNode(self.tree)
@@ -92,12 +97,12 @@ class C45:
             if node.threshold is None:
                 # roi rac
                 for index, child in enumerate(node.children):
-                    if child.label != "Fail":
-                        if child.isLeaf:
-                            print(indent + node.label + " = " + self.attrValues[node.label][index] + " : " + child.label)
-                        else:
-                            print(indent + node.label + " = " + self.attrValues[node.label][index])
-                            self.printNode(child, indent + "|   ")
+                    # if child.label != "Fail":
+                    if child.isLeaf:
+                        print(indent + node.label + " = " + self.attrValues[node.label][index] + " : " + child.label)
+                    else:
+                        print(indent + node.label + " = " + self.attrValues[node.label][index])
+                        self.printNode(child, indent + "|   ")
             else:
                 # lien tuc
                 leftChild = node.children[0]
@@ -106,7 +111,7 @@ class C45:
                     print(indent + node.label + " <= " + str(node.threshold) + " : " + leftChild.label)
                 else:
                     print(indent + node.label + " <= " + str(node.threshold))
-                    self.printNode(leftChild, indent + "	")
+                    self.printNode(leftChild, indent + "|    ")
 
                 if rightChild.isLeaf:
                     print(indent + node.label + " > " + str(node.threshold) + " : " + rightChild.label)
@@ -118,14 +123,16 @@ class C45:
         self.tree = self.recursiveGenerateTree(self.data, self.attributes)
 
     def recursiveGenerateTree(self, curData, curAttributes):
-        allSame = self.allSameClass(curData)
-
+        allSameClass = self.allSameClass(curData)
+        allSameAttr = self.allSameAttrValue(curData)
         if len(curData) == 0:
             # Fail
             return Node(True, "Fail", None)
-        elif allSame is not False:
+        elif allSameClass is not False:
             # return a node with that class
-            return Node(True, allSame, None)
+            return Node(True, allSameClass, None)
+        elif allSameAttr is True:
+            return Node(True, "Fail", None)
         elif len(curAttributes) == 0:
             # return a node with the majority class
             majClass = self.getMajClass(curData)
@@ -147,6 +154,15 @@ class C45:
         maxInd = freq.index(max(freq))
         return self.classes[maxInd]
 
+    def allSameAttrValue(self, data):
+        stop = True
+        for row in data:
+            for idx in range(len(row) - 1):
+                if data[0][idx] != row[idx]:
+                    stop = False
+                    return stop
+        return stop
+
     # kiem tra xem du lieu deu chung 1 class khong row[-1] = classname
     def allSameClass(self, data):
         if len(data) == 0:
@@ -167,7 +183,7 @@ class C45:
 
     def splitAttribute(self, curData, curAttributes):
         splitted = []
-        maxEnt = -1 * float("inf")  # -INF entropy luon + ?
+        maxEnt = 0  # * float("inf")  # -INF entropy luon + ?
         best_attribute = -1
         # None for discrete attributes, threshold value for continuous attributes
         best_threshold = None
@@ -185,7 +201,7 @@ class C45:
                             subsets[index].append(row)
                             break
                 e = self.gain(curData, subsets)
-                if e > maxEnt:
+                if e >= maxEnt:
                     maxEnt = e
                     splitted = subsets
                     best_attribute = attribute
@@ -212,23 +228,37 @@ class C45:
                             maxEnt = e
                             best_attribute = attribute
                             best_threshold = threshold
+        print(best_attribute)
+        print(maxEnt)
         return (best_attribute, best_threshold, splitted)
 
     # do tang thong tin khi chia thanh cac tap con
-    def gain(self, unionSet, subsets):
+    def gain(self, unionSet, subsets):  # gain split
         # input : data and disjoint subsets of it
         # output : information gain
         S = len(unionSet)
         # calculate impurity before split
-        impurityBeforeSplit = self.entropy(unionSet)
+        impurityBeforeSplit = self.entropy(unionSet)  # parent node entropy
         # calculate impurity after split
         weights = [len(subset) / S for subset in subsets]
-        impurityAfterSplit = 0
+        impurityAfterSplit = 0  # child nodes entropy
         for i in range(len(subsets)):
             impurityAfterSplit += weights[i] * self.entropy(subsets[i])
         # calculate total gain
         totalGain = impurityBeforeSplit - impurityAfterSplit
-        return totalGain
+        # split info
+        splitInfo = self.split_info(subsets, S)
+        if totalGain == 0:
+            return 0
+
+        gainRatio = totalGain / splitInfo
+        return gainRatio
+
+    def split_info(self, subsets, total_set):
+        split_info = 0
+        for subset in subsets:
+            split_info += - (len(subset) / total_set) * self.log(len(subset) / total_set)
+        return split_info
 
     def entropy(self, dataSet):
         S = len(dataSet)
