@@ -13,7 +13,9 @@ class C45:
         self.attrValues = {}  # gia tri thuoc tinh
         self.attributes = []  # thuoc tinh
         self.tree = None  # cay
+        self.prunedTree = None
         self.testingData = []
+        self.minNumberOfInstances = 2
 
     def getTestingData(self, testingFilePath):
         with open(testingFilePath, "r") as file:
@@ -38,6 +40,7 @@ class C45:
                 row = [x.strip() for x in line.split(",")]
                 if row != [] or row != [""]:
                     self.data.append(row)
+        return self.data
 
     def preprocessData(self):
         for index, row in enumerate(self.data):
@@ -82,26 +85,35 @@ class C45:
                     else:
                         return self.predict(rightChild, dataRow)
 
-    def validate(self):
+    def validate(self, tree, data):
         result = []
-        for row in self.data:
-            print(self.predict(self.tree, row))
-            result.append(self.predict(self.tree, row))
-        return result
+        error = 0
+        for row in data:
+            # print(self.predict(self.tree, row))
+            result.append(self.predict(tree, row))
+        for idx, r in enumerate(result):
+            if data[idx][-1] != r:
+                error += 1
+
+        return error
 
     def printTree(self):
         self.printNode(self.tree)
+
+    def printPrunedTree(self):
+        self.printNode(self.prunedTree)
 
     def printNode(self, node, indent=""):
         if not node.isLeaf:
             if node.threshold is None:
                 # roi rac
                 for index, child in enumerate(node.children):
-                    # if child.label != "Fail":
                     if child.isLeaf:
-                        print(indent + node.label + " = " + self.attrValues[node.label][index] + " : " + child.label)
+                        print(indent + node.label + " ID: " + str(node._id) + " = " + self.attrValues[node.label][
+                            index] + " : " + child.label + ' idc: ' + str(child._id))
                     else:
-                        print(indent + node.label + " = " + self.attrValues[node.label][index])
+                        print(
+                            indent + node.label + " ID: " + str(node._id) + " = " + self.attrValues[node.label][index])
                         self.printNode(child, indent + "|   ")
             else:
                 # lien tuc
@@ -120,30 +132,45 @@ class C45:
                     self.printNode(rightChild, indent + "|   ")
 
     def generateTree(self):
-        self.tree = self.recursiveGenerateTree(self.data, self.attributes)
+        self.tree = self.recursiveGenerateTree(self.data, self.attributes, self.getMajClass(self.data))
+        return self.tree
 
-    def recursiveGenerateTree(self, curData, curAttributes):
+    def recursiveGenerateTree(self, curData, curAttributes, parentMajClass):
+
+        # print(curData)
         allSameClass = self.allSameClass(curData)
         allSameAttr = self.allSameAttrValue(curData)
+        nodeMajClass = self.getMajClass(curData)
         if len(curData) == 0:
             # Fail
-            return Node(True, "Fail", None)
+            return Node(True, parentMajClass, None, nodeMajClass, None)
         elif allSameClass is not False:
             # return a node with that class
-            return Node(True, allSameClass, None)
+            return Node(True, allSameClass, None, nodeMajClass,None)
         elif allSameAttr is True:
-            return Node(True, "Fail", None)
+            return Node(True, parentMajClass, None, nodeMajClass,None)
         elif len(curAttributes) == 0:
             # return a node with the majority class
-            majClass = self.getMajClass(curData)
-            return Node(True, majClass, None)
+            return Node(True, nodeMajClass, None, nodeMajClass,None)
         else:
             # chon thuoc tinh, xoa thuoc tinh tot nhat trong danh sach thuoc tinh
+            # print(i)
             (best, best_threshold, splitted) = self.splitAttribute(curData, curAttributes)
+
             remainingAttributes = curAttributes[:]
             remainingAttributes.remove(best)
-            node = Node(False, best, best_threshold)
-            node.children = [self.recursiveGenerateTree(subset, remainingAttributes) for subset in splitted]
+            node = Node(False, best, best_threshold, nodeMajClass,None)
+
+
+            countSubset = 0
+            for subset in splitted:
+                if len(subset) >= self.minNumberOfInstances:
+                    countSubset += 1
+            if countSubset < 2:
+                return Node(True, parentMajClass, None, nodeMajClass,None)
+            node.children = [self.recursiveGenerateTree(subset, remainingAttributes, nodeMajClass) for subset
+                             in splitted]
+            node.subsetData = curData
             return node
 
     def getMajClass(self, curData):
@@ -187,7 +214,7 @@ class C45:
         best_attribute = -1
         # None for discrete attributes, threshold value for continuous attributes
         best_threshold = None
-        for attribute in curAttributes:
+        for attr_idx, attribute in enumerate(curAttributes):
             indexOfAttribute = self.attributes.index(attribute)
             if self.isAttrDiscrete(attribute):
                 # split curData into n-subsets, where n is the number of
@@ -228,8 +255,8 @@ class C45:
                             maxEnt = e
                             best_attribute = attribute
                             best_threshold = threshold
-        print(best_attribute)
-        print(maxEnt)
+        #     print(attribute + str(len(curData)) + ' ' + str(e))
+        # print('select ' + best_attribute)
         return (best_attribute, best_threshold, splitted)
 
     # do tang thong tin khi chia thanh cac tap con
@@ -284,11 +311,69 @@ class C45:
         else:
             return math.log(x, 2)
 
+    def getPessimisticErrBefore(self, tree, data):
+        error = (self.validate(tree, data) + 0.5)/len(data)
+        #print(error)
+        return error
+
+    def getPessimisticErrAfter(self, tree, data, numberOfLeafs):
+        error = (self.validate(tree, data) + numberOfLeafs * 0.5) /len(data)
+        #print(error)
+        return error
+
+    def pruneTheTree(self):
+        self.prunedTree = self.tree
+        self.prune(self.prunedTree)
+        #print(self.prunedTree.children)
+        self.printPrunedTree()
+
+    def prune(self, node):
+
+        if not node.isLeaf:
+            for child in node.children:
+                self.prune(child)
+            # if node._id == 0:
+            #     return
+            after = self.getPessimisticErrAfter(self.prunedTree, node.subsetData, len(node.children))
+            # la node sat nhat voi leaf
+            tmpChildren = node.children
+            tmpLabel = node.label
+            # print(str(node.isLeaf) + ' ' + tmpLabel + ' ' + str(node._id))
+            node.isLeaf = True
+            node.children = None
+            node.label = node.majClass
+            before = self.getPessimisticErrBefore(self.prunedTree, node.subsetData)
+            # for c in tmpChildren:
+            #     print(c.label)
+            #self.printPrunedTree()
+            # print(before)
+            # print(after)
+            #neu khong can tia
+            if before > after:
+                print(before - after)
+                node.children = tmpChildren
+                node.isLeaf = False
+                node.label = tmpLabel
+        return
+
+    # def getNode(self, node, nodeIdToSplit, newNode):
+    #     newNode = node
+    #     for child in node:
+    #         newNode
+    #         self.getNode(child, nodeIdToSplit, newTree)
+    #     if node._id == nodeIdToSplit:
+    #         return child
 
 # gom nhan, nguong(neu co), la nut la, cac nut con
 class Node:
-    def __init__(self, isLeaf, label, threshold):
+    _id = 0
+
+    def __init__(self, isLeaf, label, threshold, majClass, data):
+        self._id = Node._id
+        Node._id += 1
         self.label = label
         self.threshold = threshold
         self.isLeaf = isLeaf
         self.children = []
+        self.majClass = majClass  # class xuat hien nhieu nhat trong subset tai node do
+        self.subsetData = data
