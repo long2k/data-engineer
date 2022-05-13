@@ -15,7 +15,7 @@ class C45:
         self.tree = None  # cay
         self.prunedTree = None
         self.testingData = []
-        self.minNumberOfInstances = 2
+        self.minNumberOfInstances = 0
 
     def getTestingData(self, testingFilePath):
         with open(testingFilePath, "r") as file:
@@ -137,7 +137,7 @@ class C45:
 
     def recursiveGenerateTree(self, curData, curAttributes, parentMajClass):
 
-        # print(curData)
+        print(len(curData))
         allSameClass = self.allSameClass(curData)
         allSameAttr = self.allSameAttrValue(curData)
         nodeMajClass = self.getMajClass(curData)
@@ -312,7 +312,7 @@ class C45:
             return math.log(x, 2)
 
     def getPessimisticErrBefore(self, tree, data):
-        error = (self.validate(tree, data) + 0.5)/len(data)
+        error = (self.validate(tree, data))/len(data)
         #print(error)
         return error
 
@@ -326,6 +326,7 @@ class C45:
         self.prune(self.prunedTree)
         #print(self.prunedTree.children)
         self.printPrunedTree()
+        return self.prunedTree
 
     def prune(self, node):
 
