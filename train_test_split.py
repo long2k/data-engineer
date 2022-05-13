@@ -44,12 +44,15 @@ def write_arff_file(path, dataset_name, attrs, attr_values, classes, data):
     with open(path, "w+") as new_file:
         new_file.write('@RELATION ' + dataset_name + '\n \n')
         for a in attrs:
-            new_file.write('@ATTRIBUTE ' + a + ' {')
-            for idx, v in enumerate(attr_values[a]):
-                if idx == len(attr_values[a]) - 1:
-                    new_file.write(v + "}\n")
-                else:
-                    new_file.write(v + ",")
+            if attr_values[a][0] == 'continuous':
+                new_file.write('@ATTRIBUTE ' + a + ' numeric \n')
+            else:
+                new_file.write('@ATTRIBUTE ' + a + ' {')
+                for idx, v in enumerate(attr_values[a]):
+                    if idx == len(attr_values[a]) - 1:
+                        new_file.write(v + "}\n")
+                    else:
+                        new_file.write(v + ",")
 
         new_file.write('@ATTRIBUTE class {')
         for idx, c in enumerate(classes):
@@ -70,4 +73,5 @@ def write_arff_file(path, dataset_name, attrs, attr_values, classes, data):
 
 # ratio: tỉ lệ chia data
 
-train_test_split('car', 'data/car/1.0/car.data', 'data/car/1.0/car.c45-names', 'data/car', 0.8)
+# train_test_split('car', 'data/car/1.0/car.data', 'data/car/1.0/car.c45-names', 'data/car', 0.8)
+train_test_split('ecoli', 'data/ecoli/1.0/ecoli.data', 'data/ecoli/1.0/ecoli.names', 'data/ecoli', 1.0)

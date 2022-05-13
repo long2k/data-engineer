@@ -54,3 +54,17 @@ def gain_ratio(unionSet, subsets, classes):  # gain split
         return 0
     ratio = totalGain / splitInfo
     return ratio
+
+# def gain(unionSet, subsets, classes):
+#     S = len(unionSet)
+#     impurityBeforeSplit = entropy(unionSet, classes)  # parent node entropy
+#     weights = [len(subset) / S for subset in subsets]
+#     impurityAfterSplit = 0  # child nodes entropy
+#     for i in range(len(subsets)):
+#         impurityAfterSplit += weights[i] * entropy(subsets[i], classes)
+#     # calculate total gain
+#     totalGain = impurityBeforeSplit - impurityAfterSplit
+#
+#     if totalGain == 0:
+#         return 0
+#     return totalGain

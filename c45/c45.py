@@ -153,7 +153,7 @@ class C45:
 
         # print(len(curData))
         allSameClass = self.allSameClass(data)
-        allSameAttr = self.allSameAttrValue(data)
+        allSameAttr = self.allSameAttrValue(data, curAttributes)
         nodeMajClass = self.get_major_class(data)
         if len(data) == 0:
             # Fail
@@ -197,11 +197,12 @@ class C45:
         max_idx = freq.index(max(freq))
         return self.classes[max_idx]
 
-    def allSameAttrValue(self, data):
+    def allSameAttrValue(self, data, attrs):
         stop = True
         for row in data:
-            for idx in range(len(row) - 1):
-                if data[0][idx] != row[idx]:
+            for a in attrs:
+                attr_idx = self.attributes.index(a)
+                if data[0][attr_idx] != row[attr_idx]:
                     stop = False
                     return stop
         return stop

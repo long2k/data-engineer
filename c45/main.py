@@ -9,10 +9,12 @@ ratio = 0.8  # thay cái này 0.6 0.7 0.8...
 #           "../data/car/" + str(ratio) + "/testing/car.data",
 #           "../data/car/1.0/car.c45-names")
 # Sử dụng training làm test
-c45 = C45("../data/car/1.0/car.data",
-          "../data/car/1.0/car.data",
-          "../data/car/1.0/car.c45-names")
-
+# c45 = C45("../data/car/1.0/car.data",
+#           "../data/car/1.0/car.data",
+#           "../data/car/1.0/car.c45-names")
+c45 = C45("../data/ecoli/1.0/ecoli.data",
+          "../data/ecoli/1.0/ecoli.data",
+          "../data/ecoli/1.0/ecoli.names")
 data, testing_data = c45.get_data()
 tree = c45.generateTree()
 c45.printTree(tree)

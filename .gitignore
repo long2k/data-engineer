@@ -2,3 +2,4 @@ __pycache__/
 *.py[cod]
 *.py.save
 
+/data/car/0.8/testing/car0.8.arff
