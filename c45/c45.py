@@ -1,185 +1,201 @@
-import math
+from Node import Node
+from cal_gain_ratio import gain_ratio
+from read_data import get_data, get_names
 
 
 class C45:
-    """Creates a decision tree with C4.5 algorithm"""
 
-    def __init__(self, pathToData, pathToNames):
-        self.filePathToData = pathToData
-        self.filePathToNames = pathToNames
-        self.data = []  # du lieu duoc nap
-        self.classes = []  # lop phan loai
-        self.numAttributes = -1  # so thuoc tinh
-        self.attrValues = {}  # gia tri thuoc tinh
-        self.attributes = []  # thuoc tinh
-        self.tree = None  # cay
-        self.prunedTree = None
-        self.testingData = []
-        self.minNumberOfInstances = 0
+    def __init__(self, training_path, testing_path, names_path):
+        # Đường dẫn
+        self.training_path = training_path
+        self.testing_path = testing_path
+        self.names_path = names_path
 
-    def getTestingData(self, testingFilePath):
-        with open(testingFilePath, "r") as file:
-            for line in file:
-                row = [x.strip() for x in line.split(",")]
-                if row != [] or row != [""]:
-                    self.testingData.append(row)
+        self.classes = []  # Lớp phân loại
+        self.attr_values = {}  # Giá trị các thuộc tính
+        self.attributes = []  # Thuộc tính
 
-    def fetchData(self):
-        with open(self.filePathToNames, "r") as file:
-            classes = file.readline()
-            self.classes = [x.strip() for x in classes.split(",")]
-            # add attributes
-            for line in file:
-                [attribute, values] = [x.strip() for x in line.split(":")]
-                values = [x.strip() for x in values.split(",")]
-                self.attrValues[attribute] = values
-        self.numAttributes = len(self.attrValues.keys())
-        self.attributes = list(self.attrValues.keys())
-        with open(self.filePathToData, "r") as file:
-            for line in file:
-                row = [x.strip() for x in line.split(",")]
-                if row != [] or row != [""]:
-                    self.data.append(row)
-        return self.data
+        self.tree = None  # Cây
+        self.prunedTree = None  # Cây được tỉa
 
-    def preprocessData(self):
-        for index, row in enumerate(self.data):
-            for attr_index in range(self.numAttributes):
+        self.count_leaf = 0
+        self.count_node = 0
+
+        self.matrix = {}
+        # Dữ liệu
+        self.training_data = []
+        self.testing_data = []
+
+        self.minNumberOfInstances = 2
+
+    def get_data(self):
+        (self.attributes, self.attr_values, self.classes) = get_names(self.names_path)
+        self.training_data = self.preprocess(get_data(self.training_path))
+        self.testing_data = self.preprocess(get_data(self.testing_path))
+        return self.training_data, self.testing_data
+
+    def preprocess(self, data):
+        for idx, row in enumerate(data):
+            for attr_idx in range(len(self.attributes)):
                 # du lieu lien tuc thi ep kieu string => float
-                if (not self.isAttrDiscrete(self.attributes[attr_index])):
-                    self.data[index][attr_index] = float(self.data[index][attr_index])
+                if self.is_continuous_attr(self.attributes[attr_idx]):
+                    data[idx][attr_idx] = float(data[idx][attr_idx])
+        return data
 
-    def preprocessTestingData(self):
-        for idx, row in enumerate(self.testingData):
-            for attr_idx in range(self.numAttributes):
-                if self.isAttrDiscrete(self.attributes[attr_idx]):
-                    self.testingData[idx][attr_idx] = float(self.testingData[idx][attr_idx])
+    def is_continuous_attr(self, attribute):
+        if len(self.attr_values[attribute]) == 1 and self.attr_values[attribute][0] == "continuous":
+            return True
+        else:
+            return False
 
-    def predict(self, node, dataRow):
+    def predict(self, node, data_row):
         if not node.isLeaf:
             # get node attribute index
-            nodeAttrIdx = -1
+            node_attr_idx = -1
             for attrIdx in range(len(self.attributes)):
                 if self.attributes[attrIdx] == node.label:
-                    nodeAttrIdx = attrIdx
+                    node_attr_idx = attrIdx
                     break
             if node.threshold is None:
                 for idx, child in enumerate(node.children):
-                    if dataRow[nodeAttrIdx] == self.attrValues[node.label][idx]:
+                    if data_row[node_attr_idx] == self.attr_values[node.label][idx]:
                         if child.isLeaf:
                             return str(child.label)
                         else:
-                            return self.predict(child, dataRow)
+                            return self.predict(child, data_row)
             else:
-                leftChild = node.children[0]
-                rightChild = node.children[1]
+                left_child = node.children[0]
+                right_child = node.children[1]
 
-                if float(dataRow[nodeAttrIdx]) <= node.threshold:
-                    if leftChild.isLeaf:
-                        return str(leftChild.label)
+                if float(data_row[node_attr_idx]) <= node.threshold:
+                    if left_child.isLeaf:
+                        return str(left_child.label)
                     else:
-                        return self.predict(leftChild, dataRow)
+                        return self.predict(left_child, data_row)
                 else:
-                    if rightChild.isLeaf:
-                        return str(rightChild.label)
+                    if right_child.isLeaf:
+                        return str(right_child.label)
                     else:
-                        return self.predict(rightChild, dataRow)
+                        return self.predict(right_child, data_row)
 
-    def validate(self, tree, data):
+    def test(self, tree, data):
         result = []
         error = 0
+        correct = 0
+
         for row in data:
-            # print(self.predict(self.tree, row))
             result.append(self.predict(tree, row))
+
+        for c in self.classes:
+            self.matrix[c] = {x: 0 for x in self.classes}
         for idx, r in enumerate(result):
-            if data[idx][-1] != r:
+            if data[idx][-1] == r:
+                self.matrix[r][r] += 1
+                correct += 1
+            elif data[idx][-1] != r:
+                self.matrix[data[idx][-1]][r] += 1
                 error += 1
 
+        for row in self.matrix:
+            print(row, end=" ")
+            print(self.matrix[row])
+        print('accuracy: ' + str(correct / len(data)))
         return error
 
-    def printTree(self):
-        self.printNode(self.tree)
-
-    def printPrunedTree(self):
-        self.printNode(self.prunedTree)
+    def printTree(self, tree):
+        self.count_leaf = 0
+        self.count_node = 0
+        self.printNode(tree)
+        print('number of nodes: ' + str(self.count_node))
+        print('number of leaves: ' + str(self.count_leaf))
 
     def printNode(self, node, indent=""):
+        self.count_node += 1
         if not node.isLeaf:
             if node.threshold is None:
                 # roi rac
                 for index, child in enumerate(node.children):
                     if child.isLeaf:
-                        print(indent + node.label + " ID: " + str(node._id) + " = " + self.attrValues[node.label][
-                            index] + " : " + child.label + ' idc: ' + str(child._id))
+                        self.count_leaf += 1
+                        self.count_node += 1
+                        print(indent + node.label + " = " + self.attr_values[node.label][
+                            index] + " : " + child.label)
                     else:
                         print(
-                            indent + node.label + " ID: " + str(node._id) + " = " + self.attrValues[node.label][index])
+                            indent + node.label + " = " + self.attr_values[node.label][index])
                         self.printNode(child, indent + "|   ")
             else:
                 # lien tuc
                 leftChild = node.children[0]
                 rightChild = node.children[1]
                 if leftChild.isLeaf:
+                    self.count_leaf += 1
+                    self.count_node += 1
                     print(indent + node.label + " <= " + str(node.threshold) + " : " + leftChild.label)
                 else:
                     print(indent + node.label + " <= " + str(node.threshold))
                     self.printNode(leftChild, indent + "|    ")
 
                 if rightChild.isLeaf:
+                    self.count_leaf += 1
+                    self.count_node += 1
                     print(indent + node.label + " > " + str(node.threshold) + " : " + rightChild.label)
                 else:
                     print(indent + node.label + " > " + str(node.threshold))
                     self.printNode(rightChild, indent + "|   ")
 
     def generateTree(self):
-        self.tree = self.recursiveGenerateTree(self.data, self.attributes, self.getMajClass(self.data))
+        self.tree = self.recursiveGenerateTree(self.training_data, self.attributes,
+                                               self.get_major_class(self.training_data))
         return self.tree
 
-    def recursiveGenerateTree(self, curData, curAttributes, parentMajClass):
+    def recursiveGenerateTree(self, data, curAttributes, parentMajClass):
 
-        print(len(curData))
-        allSameClass = self.allSameClass(curData)
-        allSameAttr = self.allSameAttrValue(curData)
-        nodeMajClass = self.getMajClass(curData)
-        if len(curData) == 0:
+        # print(len(curData))
+        allSameClass = self.allSameClass(data)
+        allSameAttr = self.allSameAttrValue(data)
+        nodeMajClass = self.get_major_class(data)
+        if len(data) == 0:
             # Fail
             return Node(True, parentMajClass, None, nodeMajClass, None)
         elif allSameClass is not False:
             # return a node with that class
-            return Node(True, allSameClass, None, nodeMajClass,None)
+            return Node(True, allSameClass, None, nodeMajClass, None)
         elif allSameAttr is True:
-            return Node(True, parentMajClass, None, nodeMajClass,None)
+            return Node(True, parentMajClass, None, nodeMajClass, None)
         elif len(curAttributes) == 0:
             # return a node with the majority class
-            return Node(True, nodeMajClass, None, nodeMajClass,None)
+            return Node(True, nodeMajClass, None, nodeMajClass, None)
         else:
             # chon thuoc tinh, xoa thuoc tinh tot nhat trong danh sach thuoc tinh
             # print(i)
-            (best, best_threshold, splitted) = self.splitAttribute(curData, curAttributes)
+            (best, best_threshold, splitted) = self.splitAttribute(data, curAttributes)
 
             remainingAttributes = curAttributes[:]
             remainingAttributes.remove(best)
-            node = Node(False, best, best_threshold, nodeMajClass,None)
+            node = Node(False, best, best_threshold, nodeMajClass, None)
 
+            if best_threshold is None:  # Ap dung cho gia tri roi rac
+                count_subset = 0
+                for subset in splitted:
+                    if len(subset) >= self.minNumberOfInstances:
+                        count_subset += 1
+                if count_subset < 2:
+                    return Node(True, parentMajClass, None, nodeMajClass, None)
 
-            countSubset = 0
-            for subset in splitted:
-                if len(subset) >= self.minNumberOfInstances:
-                    countSubset += 1
-            if countSubset < 2:
-                return Node(True, parentMajClass, None, nodeMajClass,None)
             node.children = [self.recursiveGenerateTree(subset, remainingAttributes, nodeMajClass) for subset
                              in splitted]
-            node.subsetData = curData
+            node.subsetData = data
             return node
 
-    def getMajClass(self, curData):
-        freq = [0] * len(self.classes)  # tao arr freq[so luong class]
-        for row in curData:
+    # Tìm ra class xuất hiện nhiều nhất trong tập dữ liệu
+    def get_major_class(self, data):
+        freq = [0] * len(self.classes)
+        for row in data:
             index = self.classes.index(row[-1])
             freq[index] += 1
-        maxInd = freq.index(max(freq))
-        return self.classes[maxInd]
+        max_idx = freq.index(max(freq))
+        return self.classes[max_idx]
 
     def allSameAttrValue(self, data):
         stop = True
@@ -200,14 +216,6 @@ class C45:
                 return False
         return data[0][-1]
 
-    def isAttrDiscrete(self, attribute):
-        if attribute not in self.attributes:
-            raise ValueError("Attribute not listed")
-        elif len(self.attrValues[attribute]) == 1 and self.attrValues[attribute][0] == "continuous":
-            return False
-        else:
-            return True
-
     def splitAttribute(self, curData, curAttributes):
         splitted = []
         maxEnt = 0  # * float("inf")  # -INF entropy luon + ?
@@ -216,19 +224,19 @@ class C45:
         best_threshold = None
         for attr_idx, attribute in enumerate(curAttributes):
             indexOfAttribute = self.attributes.index(attribute)
-            if self.isAttrDiscrete(attribute):
+            if not self.is_continuous_attr(attribute):
                 # split curData into n-subsets, where n is the number of
                 # different values of attribute i. Choose the attribute with
                 # the max gain
-                valuesForAttribute = self.attrValues[attribute]
+                valuesForAttribute = self.attr_values[attribute]
                 subsets = [[] for a in valuesForAttribute]  # thống kê các mẫu có thuộc tính chứa giá trị này
                 for row in curData:
                     for index in range(len(valuesForAttribute)):
                         if row[indexOfAttribute] == valuesForAttribute[index]:  # index ?
                             subsets[index].append(row)
                             break
-                e = self.gain(curData, subsets)
-                if e >= maxEnt:
+                e = gain_ratio(curData, subsets, self.classes)
+                if e > maxEnt:
                     maxEnt = e
                     splitted = subsets
                     best_attribute = attribute
@@ -249,132 +257,59 @@ class C45:
                                 greater.append(row)
                             else:
                                 less.append(row)
-                        e = self.gain(curData, [less, greater])  # test do do thong tin khi chia nguong
-                        if e >= maxEnt:
+                        e = gain_ratio(curData, [less, greater], self.classes)  # test do do thong tin khi chia nguong
+                        if e > maxEnt:
                             splitted = [less, greater]
                             maxEnt = e
                             best_attribute = attribute
                             best_threshold = threshold
-        #     print(attribute + str(len(curData)) + ' ' + str(e))
-        # print('select ' + best_attribute)
-        return (best_attribute, best_threshold, splitted)
+        return best_attribute, best_threshold, splitted
 
-    # do tang thong tin khi chia thanh cac tap con
-    def gain(self, unionSet, subsets):  # gain split
-        # input : data and disjoint subsets of it
-        # output : information gain
-        S = len(unionSet)
-        # calculate impurity before split
-        impurityBeforeSplit = self.entropy(unionSet)  # parent node entropy
-        # calculate impurity after split
-        weights = [len(subset) / S for subset in subsets]
-        impurityAfterSplit = 0  # child nodes entropy
-        for i in range(len(subsets)):
-            impurityAfterSplit += weights[i] * self.entropy(subsets[i])
-        # calculate total gain
-        totalGain = impurityBeforeSplit - impurityAfterSplit
-        # split info
-        splitInfo = self.split_info(subsets, S)
-        if totalGain == 0:
-            return 0
-
-        gainRatio = totalGain / splitInfo
-        return gainRatio
-
-    def split_info(self, subsets, total_set):
-        split_info = 0
-        for subset in subsets:
-            split_info += - (len(subset) / total_set) * self.log(len(subset) / total_set)
-        return split_info
-
-    def entropy(self, dataSet):
-        S = len(dataSet)
-        if S == 0:
-            return 0
-        num_classes = [0 for i in self.classes]
-        # dem so class xuat hien trong dataset
-        for row in dataSet:
-            classIndex = list(self.classes).index(row[-1])
-            num_classes[classIndex] += 1
-        # chia S ra tan so xuat hien cua lop do trong data hien tai
-        num_classes = [x / S for x in num_classes]
-        ent = 0
-        # tinh entropy
-        for num in num_classes:
-            ent += num * self.log(num)
-        return ent * -1
-
-    # logarith co so 2
-    def log(self, x):
-        if x == 0:
-            return 0
-        else:
-            return math.log(x, 2)
+    # ------------TỈA CÂY------------
+    def validate(self, tree, data):
+        result = []
+        error = 0
+        for row in data:
+            result.append(self.predict(tree, row))
+        for idx, r in enumerate(result):
+            if data[idx][-1] != r:
+                error += 1
+        return error
 
     def getPessimisticErrBefore(self, tree, data):
-        error = (self.validate(tree, data))/len(data)
-        #print(error)
+        error = (self.validate(tree, data)) / len(data)
+        # print(error)
         return error
 
     def getPessimisticErrAfter(self, tree, data, numberOfLeafs):
-        error = (self.validate(tree, data) + numberOfLeafs * 0.5) /len(data)
-        #print(error)
+        error = (self.validate(tree, data) + numberOfLeafs * 0.5) / len(data)
+        # print(error)
         return error
 
     def pruneTheTree(self):
         self.prunedTree = self.tree
         self.prune(self.prunedTree)
-        #print(self.prunedTree.children)
-        self.printPrunedTree()
+        self.printTree(self.prunedTree)
         return self.prunedTree
 
     def prune(self, node):
-
         if not node.isLeaf:
             for child in node.children:
                 self.prune(child)
-            # if node._id == 0:
-            #     return
             after = self.getPessimisticErrAfter(self.prunedTree, node.subsetData, len(node.children))
             # la node sat nhat voi leaf
-            tmpChildren = node.children
-            tmpLabel = node.label
+            tmp_children = node.children
+            tmp_label = node.label
             # print(str(node.isLeaf) + ' ' + tmpLabel + ' ' + str(node._id))
             node.isLeaf = True
             node.children = None
             node.label = node.majClass
             before = self.getPessimisticErrBefore(self.prunedTree, node.subsetData)
-            # for c in tmpChildren:
-            #     print(c.label)
-            #self.printPrunedTree()
-            # print(before)
-            # print(after)
-            #neu khong can tia
+
+            # neu khong can tia
             if before > after:
-                print(before - after)
-                node.children = tmpChildren
+                # print(before - after)
+                node.children = tmp_children
                 node.isLeaf = False
-                node.label = tmpLabel
+                node.label = tmp_label
         return
-
-    # def getNode(self, node, nodeIdToSplit, newNode):
-    #     newNode = node
-    #     for child in node:
-    #         newNode
-    #         self.getNode(child, nodeIdToSplit, newTree)
-    #     if node._id == nodeIdToSplit:
-    #         return child
-
-# gom nhan, nguong(neu co), la nut la, cac nut con
-class Node:
-    _id = 0
-
-    def __init__(self, isLeaf, label, threshold, majClass, data):
-        self._id = Node._id
-        Node._id += 1
-        self.label = label
-        self.threshold = threshold
-        self.isLeaf = isLeaf
-        self.children = []
-        self.majClass = majClass  # class xuat hien nhieu nhat trong subset tai node do
-        self.subsetData = data

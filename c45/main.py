@@ -1,20 +1,22 @@
-#!/usr/bin/env python
-import pdb
+# from c45 import C45
 
+# c1 = C45("../data/breast-cancer/breast-cancer-new.data", "../data/breast-cancer/breast-cancer.names")
 from c45 import C45
 
-# c1 = C45("../data/iris/iris.data", "../data/iris/iris.names")
-#c1 = C45("../data/weather/weather.data", "../data/weather/weather.names")
-# c1 = C45("../data/breast-cancer/breast-cancer-new.data", "../data/breast-cancer/breast-cancer.names")
-# c1 = C45("../data/cheat/cheat.data", "../data/cheat/cheat.names")
-c1 = C45("../data/car/car.data", "../data/car/car.c45-names")
-data = c1.fetchData()
-c1.preprocessData()
-tree = c1.generateTree()
-c1.printTree()
-error = c1.validate(tree, data)
-print('traning-error: ' + str(1-error/len(data)))
-print('pruned-tree')
-prunedTree = c1.pruneTheTree()
-error = c1.validate(prunedTree, data)
-print('pruned-tree-traning-error: ' + str(1-error/len(data)))
+ratio = 0.8  # thay cái này 0.6 0.7 0.8...
+
+# c45 = C45("../data/car/" + str(ratio) + "/training/car.data",
+#           "../data/car/" + str(ratio) + "/testing/car.data",
+#           "../data/car/1.0/car.c45-names")
+# Sử dụng training làm test
+c45 = C45("../data/car/1.0/car.data",
+          "../data/car/1.0/car.data",
+          "../data/car/1.0/car.c45-names")
+
+data, testing_data = c45.get_data()
+tree = c45.generateTree()
+c45.printTree(tree)
+c45.test(tree, testing_data)
+print('\n ---------pruned-tree--------- \n')
+prunedTree = c45.pruneTheTree()
+c45.test(prunedTree, testing_data)
